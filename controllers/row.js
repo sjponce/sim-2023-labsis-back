@@ -192,8 +192,7 @@ exports.generate = async function (req, res) {
           trabajo = {
             ...trabajo,
             tipoTrabajo,
-            inicioTrabajo: filaActual.reloj,
-            finTrabajo: filaActual.reloj + tiempoTrabajo,
+            tiempoTrabajo,
             estado: "Esperando",
           };
 
@@ -207,6 +206,7 @@ exports.generate = async function (req, res) {
             trabajo.inicioTrabajo = filaActual.reloj;
             trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
             trabajo.estado = "En curso";
+
           } else if (tecnico2.estado === "Disponible") {
             tecnico2.estado = "Ocupado";
             tecnico2.tipoTrabajo = tipoTrabajo;
@@ -249,7 +249,7 @@ exports.generate = async function (req, res) {
       case "Fin trabajo":
 
         trabajos.splice(trabajos.indexOf(t => eventoActual.trabajo === t), 1);
-        const tecnico = eventoActual.tecnico.id === 1 ?
+        let tecnico = eventoActual.tecnico.id === 1 ?
             tecnico1 : tecnico2;
 
         if(colaLlegada.length) {
@@ -272,7 +272,9 @@ exports.generate = async function (req, res) {
 
         filaActual = {
             ...filaActual,
-            trabajos
+            trabajos,
+            tecnico1: tecnico.id === 1 ? tecnico : tecnico1,
+            tecnico2: tecnico.id === 2 ? tecnico : tecnico2,
         } 
         break;
       default:
