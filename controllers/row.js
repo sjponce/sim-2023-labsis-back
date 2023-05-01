@@ -101,6 +101,7 @@ exports.generate = async function (req, res) {
     reloj: 0,
     evento: "Init",
     rndProxLlegada,
+    tiempoEntreLlegadas: proxLlegada,
     proxLlegada,
     rndTipoTrabajo: "",
     tipoTrabajo: "",
@@ -129,7 +130,7 @@ exports.generate = async function (req, res) {
   const eventos = [{ tipo: "Llegada", reloj: proxLlegada }];
 
   let filaAnterior = filaInicial;
-
+  let trabajosIndex = 0;
   for (let i = 0; i < n; i++) {
     // Obtenemos el proximo evento.
     eventos.sort((a, b) => a.reloj - b.reloj);
@@ -138,7 +139,7 @@ exports.generate = async function (req, res) {
     filaActual = {
       ...filaAnterior,
       n: i + 1,
-      reloj: eventoActual.reloj + filaAnterior.reloj,
+      reloj: eventoActual.reloj,
       evento: eventoActual.tipo,
     };
 
@@ -153,16 +154,17 @@ exports.generate = async function (req, res) {
     // Segun el evento operamos la fila
     switch (eventoActual.tipo) {
       case "Llegada":
-        let [rndProxLlegada, proxLlegada] = calcUniforme(
+        let [rndProxLlegada, tiempoEntreLlegadas] = calcUniforme(
           cotaInfLlegada,
-          cotaInfLlegada
+          cotaSupLlegada
         );
-        proxLlegada += filaAnterior.reloj;
+        const proxLlegada = tiempoEntreLlegadas + filaActual.reloj;
         eventos.push({ tipo: "Llegada", reloj: proxLlegada });
 
         filaActual = {
           ...filaActual,
           rndProxLlegada,
+          tiempoEntreLlegadas,
           proxLlegada,
         };
 
@@ -191,8 +193,10 @@ exports.generate = async function (req, res) {
           ] = calcTipoTrabajo();
           trabajo = {
             ...trabajo,
+            id: trabajosIndex++,
             tipoTrabajo,
             tiempoTrabajo,
+            llegada: filaActual.reloj,
             estado: "Esperando",
           };
 
@@ -231,8 +235,6 @@ exports.generate = async function (req, res) {
           trabajos.push(trabajo);
           filaActual = {
             ...filaActual,
-            rndProxLlegada,
-            proxLlegada,
             tipoTrabajo,
             rndTipoTrabajo,
             rndVariacion,

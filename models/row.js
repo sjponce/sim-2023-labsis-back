@@ -5,6 +5,7 @@ exports = module.exports = function(app, mongoose) {
 		reloj: 		{ type: Number },
 		evento: 		{ type: String },
 		rndProxLlegada: { type: Number },
+		tiempoEntreLlegadas: { type: Number },
 		proxLlegada: { type: Number },
 		rndTipoTrabajo: { type: Number },
 		tipoTrabajo: { type: String },
