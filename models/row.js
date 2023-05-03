@@ -16,7 +16,7 @@ exports = module.exports = function(app, mongoose) {
 		colaLlegada: { type: [] },
 		tecnico1: { type: {} },
 		tecnico2: { type: {} },
-		trabajos: { type: [] },
+		trabajos: { type: {} },
 	});
 	mongoose.model('row', rowSchema);
 };

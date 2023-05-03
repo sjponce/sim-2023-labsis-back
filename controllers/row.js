@@ -121,7 +121,7 @@ exports.generate = async function (req, res) {
       tiempoTrabajo: 0,
       finTrabajo: 0,
     },
-    trabajos: [],
+    trabajos: {},
   };
 
   let filaActual = filaInicial;
@@ -226,13 +226,16 @@ exports.generate = async function (req, res) {
           }
           eventos.push({
             tipo: "Fin trabajo",
-            reloj: variacionTiempoTrabajo + tiempoTrabajo + filaActual.reloj,
+            reloj: tiempoTrabajo + filaActual.reloj,
             trabajo,
             tecnico:
               tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
           });
 
-          trabajos.push(trabajo);
+          trabajos[`T${trabajo.id}`] = {
+            ...trabajos[`T${trabajo.id}`],
+            ...trabajo,
+          };
           filaActual = {
             ...filaActual,
             tipoTrabajo,
@@ -250,27 +253,42 @@ exports.generate = async function (req, res) {
 
       case "Fin trabajo":
 
-        trabajos.splice(trabajos.indexOf(t => eventoActual.trabajo === t), 1);
+        delete trabajos[`T${eventoActual.trabajo.id}`]
+
         let tecnico = eventoActual.tecnico.id === 1 ?
-            tecnico1 : tecnico2;
-
+        tecnico1 : tecnico2;
+        
         if(colaLlegada.length) {
-            colaLlegada.shift();
+          colaLlegada.pop();
+          const trabajo = {
+            ...eventoActual.trabajo,
+            inicioTrabajo: filaActual.reloj,
+            finTrabajo: eventoActual.trabajo.tiempoTrabajo + filaActual.reloj,
+            estado: 'En curso',
+          };
+          
+          tecnico.estado = "Ocupado";
+          tecnico.tipoTrabajo = trabajo.tipoTrabajo;
+          tecnico.inicioTrabajo = trabajo.reloj;
+          tecnico.tiempoTrabajo = eventoActual.trabajo.tiempoTrabajo;
+          tecnico.finTrabajo = eventoActual.trabajo.tiempoTrabajo + filaActual.reloj;
 
-            tecnico.estado = "Ocupado";
-            tecnico.tipoTrabajo = eventoActual.trabajo.tipoTrabajo;
-            tecnico.inicioTrabajo = filaActual.reloj;
-            tecnico.tiempoTrabajo = eventoActual.trabajo.tiempoTrabajo;
-            tecnico.finTrabajo = eventoActual.trabajo.tiempoTrabajo + filaActual.reloj;
+
+          trabajos[`T${trabajo.id}`] = {
+            ...trabajos[`T${trabajo.id}`],
+            ...trabajo,
+          };
         } else {
-            tecnico = {
-                id: eventoActual.tecnico.id,
-                estado: "Disponible",
-                inicioTrabajo: 0,
-                tiempoTrabajo: 0,
-                finTrabajo: 0,
-            };
+          tecnico = {
+            id: eventoActual.tecnico.id,
+            estado: "Disponible",
+            inicioTrabajo: 0,
+            tiempoTrabajo: 0,
+            finTrabajo: 0,
+          };
         }
+        //trabajos.splice(trabajos.indexOf(t => eventoActual.trabajo === t), 1);
+
 
         filaActual = {
             ...filaActual,
