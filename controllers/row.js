@@ -34,6 +34,7 @@ exports.generate = async function (req, res) {
     cotaSupVariacionTrabajo,
     tiempoTrabajoInicialC,
     tiempoTrabajoFinalC,
+    tamanoCola
   } = params;
 
   const calcUniforme = (a, b) => {
@@ -172,7 +173,7 @@ exports.generate = async function (req, res) {
         if (
           tecnico1.estado === "Ocupado" &&
           tecnico2.estado === "Ocupado" &&
-          colaLlegada.length >= 3
+          colaLlegada.length >= tamanoCola
         ) {
           filaActual.tipoTrabajo = "No hay cupo.";
           filaActual = {
@@ -206,10 +207,18 @@ exports.generate = async function (req, res) {
             tecnico1.inicioTrabajo = filaActual.reloj;
             tecnico1.tiempoTrabajo = tiempoTrabajo;
             tecnico1.finTrabajo = tiempoTrabajo + filaActual.reloj;
-
+            
             trabajo.inicioTrabajo = filaActual.reloj;
             trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
             trabajo.estado = "En curso";
+
+            eventos.push({
+              tipo: "Fin trabajo",
+              reloj: tiempoTrabajo + filaActual.reloj,
+              trabajo,
+              tecnico:
+                tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
+            });
 
           } else if (tecnico2.estado === "Disponible") {
             tecnico2.estado = "Ocupado";
@@ -221,16 +230,17 @@ exports.generate = async function (req, res) {
             trabajo.inicioTrabajo = filaActual.reloj;
             trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
             trabajo.estado = "En curso";
+          
+            eventos.push({
+              tipo: "Fin trabajo",
+              reloj: tiempoTrabajo + filaActual.reloj,
+              trabajo,
+              tecnico:
+                tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
+            });
           } else {
-            colaLlegada.push({ tipoTrabajo, tiempoTrabajo });
+            colaLlegada.push({ ...trabajo });
           }
-          eventos.push({
-            tipo: "Fin trabajo",
-            reloj: tiempoTrabajo + filaActual.reloj,
-            trabajo,
-            tecnico:
-              tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
-          });
 
           trabajos[`T${trabajo.id}`] = {
             ...trabajos[`T${trabajo.id}`],
@@ -259,9 +269,9 @@ exports.generate = async function (req, res) {
         tecnico1 : tecnico2;
         
         if(colaLlegada.length) {
-          colaLlegada.pop();
-          const trabajo = {
-            ...eventoActual.trabajo,
+          let trabajo = colaLlegada.shift()
+          trabajo = {
+            ...trabajo,
             inicioTrabajo: filaActual.reloj,
             finTrabajo: eventoActual.trabajo.tiempoTrabajo + filaActual.reloj,
             estado: 'En curso',
@@ -269,15 +279,22 @@ exports.generate = async function (req, res) {
           
           tecnico.estado = "Ocupado";
           tecnico.tipoTrabajo = trabajo.tipoTrabajo;
-          tecnico.inicioTrabajo = trabajo.reloj;
+          tecnico.inicioTrabajo = filaActual.reloj;
           tecnico.tiempoTrabajo = eventoActual.trabajo.tiempoTrabajo;
           tecnico.finTrabajo = eventoActual.trabajo.tiempoTrabajo + filaActual.reloj;
 
 
           trabajos[`T${trabajo.id}`] = {
-            ...trabajos[`T${trabajo.id}`],
             ...trabajo,
           };
+
+          eventos.push({
+            tipo: "Fin trabajo",
+            reloj: tecnico.finTrabajo,
+            trabajo,
+            tecnico
+          });
+
         } else {
           tecnico = {
             id: eventoActual.tecnico.id,
