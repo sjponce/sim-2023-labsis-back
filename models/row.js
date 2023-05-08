@@ -6,6 +6,7 @@ exports = module.exports = function(app, mongoose) {
 		evento: 		{ type: String },
 		rndProxLlegada: { type: Number },
 		tiempoEntreLlegadas: { type: Number },
+		promedioPermanenciaEquipos: { type: Number },
 		proxLlegada: { type: Number },
 		rndTipoTrabajo: { type: Number },
 		tipoTrabajo: { type: String },

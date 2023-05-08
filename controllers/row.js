@@ -17,7 +17,7 @@ exports.generate = async function (req, res) {
     !isNaN(params[k]) ? (params[k] = Number(params[k])) : k
   );
   const {
-    n,
+    tiempoCierre,
     cotaInfLlegada,
     cotaSupLlegada,
     probA,
@@ -34,7 +34,7 @@ exports.generate = async function (req, res) {
     cotaSupVariacionTrabajo,
     tiempoTrabajoInicialC,
     tiempoTrabajoFinalC,
-    tamanoCola
+    tamanoCola,
   } = params;
 
   const calcUniforme = (a, b) => {
@@ -45,7 +45,10 @@ exports.generate = async function (req, res) {
 
   const calcTipoTrabajo = () => {
     const rndTipoTrabajo = Math.random();
-    const [rndVariacion, variacionTiempoTrabajo] = calcUniforme(cotaInfVariacionTrabajo, cotaSupVariacionTrabajo);
+    const [rndVariacion, variacionTiempoTrabajo] = calcUniforme(
+      cotaInfVariacionTrabajo,
+      cotaSupVariacionTrabajo
+    );
     if (rndTipoTrabajo <= probA) {
       return [
         "A",
@@ -97,9 +100,15 @@ exports.generate = async function (req, res) {
     cotaSupLlegada
   );
 
+  let tiempoPermanenciaTotal, tiempoTotal, contadorNoAtendidos, tiempoSinOcupacion1, tiemposSinOcupacion2, trabajosIndex = 0;
+  let n = 0;
+  let cerrado = false;
+  let eliminadosCount = 0;
+  let eliminadosCant = 0;
   const filaInicial = {
     n: 0,
     reloj: 0,
+    promedioPermanenciaEquipos: null,
     evento: "Init",
     rndProxLlegada,
     tiempoEntreLlegadas: proxLlegada,
@@ -111,16 +120,10 @@ exports.generate = async function (req, res) {
     tecnico1: {
       id: 1,
       estado: "Disponible",
-      inicioTrabajo: 0,
-      tiempoTrabajo: 0,
-      finTrabajo: 0,
     },
     tecnico2: {
       id: 2,
       estado: "Disponible",
-      inicioTrabajo: 0,
-      tiempoTrabajo: 0,
-      finTrabajo: 0,
     },
     trabajos: {},
   };
@@ -128,18 +131,19 @@ exports.generate = async function (req, res) {
   let filaActual = filaInicial;
   await Row.insertMany([filaActual]);
 
-  const eventos = [{ tipo: "Llegada", reloj: proxLlegada }];
-
+  const eventos = [{ tipo: "Llegada", reloj: proxLlegada }, { tipo: "Cierre local", reloj: tiempoCierre }];
+   
   let filaAnterior = filaInicial;
-  let trabajosIndex = 0;
-  for (let i = 0; i < n; i++) {
+  while (cerrado === false ||
+    (filaAnterior.tecnico1.estado === 'Ocupado' && filaAnterior.tecnico2.estado === 'Ocupado' && eventos.filter(e => e.tipotrabajo === 'Fin trabajo') )) {
+    n++
     // Obtenemos el proximo evento.
     eventos.sort((a, b) => a.reloj - b.reloj);
     eventoActual = eventos.shift();
 
     filaActual = {
       ...filaAnterior,
-      n: i + 1,
+      n,
       reloj: eventoActual.reloj,
       evento: eventoActual.tipo,
     };
@@ -149,9 +153,8 @@ exports.generate = async function (req, res) {
     const colaLlegada = filaAnterior.colaLlegada;
     const trabajos = filaAnterior.trabajos;
     let trabajo = {
-        estado: "Esperando",
+      estado: "Esperando",
     };
-
     // Segun el evento operamos la fila
     switch (eventoActual.tipo) {
       case "Llegada":
@@ -160,7 +163,9 @@ exports.generate = async function (req, res) {
           cotaSupLlegada
         );
         const proxLlegada = tiempoEntreLlegadas + filaActual.reloj;
-        eventos.push({ tipo: "Llegada", reloj: proxLlegada });
+        if(proxLlegada <= tiempoCierre) {
+          eventos.push({ tipo: "Llegada", reloj: proxLlegada });
+        }
 
         filaActual = {
           ...filaActual,
@@ -184,7 +189,9 @@ exports.generate = async function (req, res) {
             variacionTiempoTrabajo: null,
             tiempoTrabajo: null,
           };
+          contadorNoAtendidos += 1;
         } else {
+          // Caso con cupo
           const [
             tipoTrabajo,
             rndTipoTrabajo,
@@ -200,46 +207,52 @@ exports.generate = async function (req, res) {
             llegada: filaActual.reloj,
             estado: "Esperando",
           };
-
-          if (tecnico1.estado === "Disponible") {
-            tecnico1.estado = "Ocupado";
-            tecnico1.tipoTrabajo = tipoTrabajo;
-            tecnico1.inicioTrabajo = filaActual.reloj;
-            tecnico1.tiempoTrabajo = tiempoTrabajo;
-            tecnico1.finTrabajo = tiempoTrabajo + filaActual.reloj;
+          let reloj = filaActual.reloj;
+          let tecnico =
+            tecnico1.estado === "Disponible"
+              ? tecnico1
+              : tecnico2.estado === "Disponible"
+              ? tecnico2
+              : undefined;
+          if (!tecnico) {
+            // Tecnicos no disponibles
+            colaLlegada.push({ ...trabajo });
+          } else if (trabajo.tipoTrabajo === "C") {
+            // Caso C
+            tecnico.estado = "Ocupado";
+            tecnico.tipoTrabajo = tipoTrabajo;
+            tecnico.inicioTrabajo = reloj;
+            tecnico.tiempoTrabajo = tiempoTrabajoInicialC;
+            tecnico.finTrabajo = tiempoTrabajoInicialC + reloj;
             
-            trabajo.inicioTrabajo = filaActual.reloj;
-            trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
             trabajo.estado = "En curso";
-
+            trabajo.tiempoFinTrabajoInicialC = reloj + tiempoTrabajoInicialC;
+            trabajo.inicioTrabajo = reloj;
             eventos.push({
               tipo: "Fin trabajo",
-              reloj: tiempoTrabajo + filaActual.reloj,
+              reloj: tecnico.finTrabajo,
               trabajo,
-              tecnico:
-                tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
-            });
-
-          } else if (tecnico2.estado === "Disponible") {
-            tecnico2.estado = "Ocupado";
-            tecnico2.tipoTrabajo = tipoTrabajo;
-            tecnico2.inicioTrabajo = filaActual.reloj;
-            tecnico2.tiempoTrabajo = tiempoTrabajo;
-            tecnico2.finTrabajo = tiempoTrabajo + filaActual.reloj;
-
-            trabajo.inicioTrabajo = filaActual.reloj;
-            trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
-            trabajo.estado = "En curso";
-          
-            eventos.push({
-              tipo: "Fin trabajo",
-              reloj: tiempoTrabajo + filaActual.reloj,
-              trabajo,
-              tecnico:
-                tecnico1.inicioTrabajo === filaActual.reloj ? tecnico1 : tecnico2,
+              tecnico,
             });
           } else {
-            colaLlegada.push({ ...trabajo });
+            // Caso A B D E
+            tecnico.estado = "Ocupado";
+            tecnico.tipoTrabajo = tipoTrabajo;
+            tecnico.inicioTrabajo = filaActual.reloj;
+            tecnico.tiempoTrabajo = tiempoTrabajo;
+            tecnico.finTrabajo = tiempoTrabajo + filaActual.reloj;
+
+            trabajo.inicioTrabajo = filaActual.reloj;
+            trabajo.finTrabajo = filaActual.reloj + tiempoTrabajo;
+            trabajo.estado = "En curso";
+
+            reloj = reloj + tiempoTrabajo;
+            eventos.push({
+              tipo: "Fin trabajo",
+              reloj,
+              trabajo,
+              tecnico,
+            });
           }
 
           trabajos[`T${trabajo.id}`] = {
@@ -262,65 +275,168 @@ exports.generate = async function (req, res) {
         break;
 
       case "Fin trabajo":
+        // Si un trabajo C termina su trabajo solitario, se agrega a la cola
+        if (eventoActual.trabajo.estado === "En curso(solitario)") {
+          const trabajoC = eventoActual.trabajo;
+          trabajoC.estado = "Esperando";
 
-        delete trabajos[`T${eventoActual.trabajo.id}`]
+          colaLlegada.push(trabajoC);
 
-        let tecnico = eventoActual.tecnico.id === 1 ?
-        tecnico1 : tecnico2;
-        
-        if(colaLlegada.length) {
-          let trabajo = colaLlegada.shift()
-          trabajo = {
-            ...trabajo,
-            inicioTrabajo: filaActual.reloj,
-            finTrabajo: eventoActual.trabajo.tiempoTrabajo + filaActual.reloj,
-            estado: 'En curso',
+          filaActual = {
+            ...filaActual,
+            trabajos: {
+              ...filaActual.trabajos,
+              [`T${eventoActual.trabajo.id}`]: {
+                ...trabajoC,
+              },
+            },
+            colaLlegada,
           };
-          
-          tecnico.estado = "Ocupado";
-          tecnico.tipoTrabajo = trabajo.tipoTrabajo;
-          tecnico.inicioTrabajo = filaActual.reloj;
-          tecnico.tiempoTrabajo = eventoActual.trabajo.tiempoTrabajo;
-          tecnico.finTrabajo = eventoActual.trabajo.tiempoTrabajo + filaActual.reloj;
+          break;
+        }
+
+        // Si un trabajo C esta en curso y tiene que empezar su trabajo solitario(fin de trabajo === undefined)
+        if (
+          eventoActual.trabajo.tipoTrabajo === "C" &&
+          eventoActual.trabajo.estado === "En curso" &&
+          eventoActual.trabajo.tiempoFinTrabajoSolitarioC === undefined
+        ) {
+          const trabajoC = eventoActual.trabajo;
+          trabajoC.estado = "En curso(solitario)";
+          trabajoC.tiempoFinTrabajoSolitarioC =
+            eventoActual.reloj - tiempoTrabajoInicialC + tiempoTrabajoC + tiempoTrabajoFinalC;
+          eventos.push({
+            tipo: "Fin trabajo",
+            reloj: trabajoC.tiempoFinTrabajoSolitarioC,
+            trabajo: trabajoC,
+          });
+
+          trabajos[`T${eventoActual.trabajo.id}`] = {
+            ...trabajoC,
+          };
+        } else {
+          // En caso que un C llegue con fecha de fin, se trata como un A B D o E
+
+          // Promedio permanencia
+          if(eventoActual.trabajo.finTrabajo > 0 ){
+            eliminadosCount += eventoActual.trabajo.finTrabajo - eventoActual.trabajo.inicioTrabajo;
+            eliminadosCant++;
+            filaActual = {
+              ...filaActual,
+              promedioPermanenciaEquipos: eliminadosCount / eliminadosCant,
+            };
+          }
+
+          delete trabajos[`T${eventoActual.trabajo.id}`];
+        }
+
+        let tecnico = eventoActual.tecnico.id === 1 ? tecnico1 : tecnico2;
+        let reloj = eventoActual.reloj;
+        if (colaLlegada.length) {
+          let trabajo = colaLlegada.shift();
+
+          if (trabajo.tipoTrabajo === "C" && trabajo.tiempoFinTrabajoSolitarioC === undefined) {
+            // Caso C primera vuelta
+            tecnico.estado = "Ocupado";
+            tecnico.tipoTrabajo = trabajo.tipoTrabajo;
+            tecnico.inicioTrabajo = reloj;
+            tecnico.tiempoTrabajo = tiempoTrabajoInicialC;
+            tecnico.finTrabajo = tecnico.tiempoTrabajo + reloj;
+            
+            trabajo.estado = "En curso";
+            trabajo.inicioTrabajo = reloj;
+            trabajo.tiempoFinTrabajoInicialC = reloj + tiempoTrabajoInicialC;
+            
+          } else if(trabajo.tipoTrabajo === "C" && trabajo.tiempoFinTrabajoSolitarioC !== undefined) {
+            // Caso C segunda vuelta
+            tecnico.estado = "Ocupado";
+            tecnico.tipoTrabajo = trabajo.tipoTrabajo;
+            tecnico.inicioTrabajo = reloj;
+            tecnico.tiempoTrabajo = tiempoTrabajoFinalC;
+            tecnico.finTrabajo = tecnico.tiempoTrabajo + reloj;
+            
+            trabajo.estado = "En curso";
+            trabajo.tiempoInicioTrabajoFinalC = reloj;
+            trabajo.finTrabajo = reloj + tiempoTrabajoFinalC;
+          } else {
+            // Caso A B D E
+            tecnico.estado = "Ocupado";
+            tecnico.tipoTrabajo = trabajo.tipoTrabajo;
+            tecnico.inicioTrabajo = filaActual.reloj;
+            tecnico.tiempoTrabajo = trabajo.tiempoTrabajo;
+            tecnico.finTrabajo = trabajo.tiempoTrabajo + filaActual.reloj;
+
+            trabajo.inicioTrabajo = filaActual.reloj;
+            trabajo.finTrabajo = filaActual.reloj + trabajo.tiempoTrabajo;
+            trabajo.estado = "En curso";
+
+            reloj = reloj + trabajo.tiempoTrabajo;
+        }
 
 
           trabajos[`T${trabajo.id}`] = {
             ...trabajo,
           };
-
           eventos.push({
             tipo: "Fin trabajo",
             reloj: tecnico.finTrabajo,
             trabajo,
-            tecnico
+            tecnico,
           });
-
         } else {
           tecnico = {
             id: eventoActual.tecnico.id,
             estado: "Disponible",
-            inicioTrabajo: 0,
-            tiempoTrabajo: 0,
-            finTrabajo: 0,
+            inicioTrabajo: undefined,
+            tiempoTrabajo: undefined,
+            finTrabajo: undefined,
           };
         }
-        //trabajos.splice(trabajos.indexOf(t => eventoActual.trabajo === t), 1);
-
 
         filaActual = {
-            ...filaActual,
-            trabajos,
-            tecnico1: tecnico.id === 1 ? tecnico : tecnico1,
-            tecnico2: tecnico.id === 2 ? tecnico : tecnico2,
-        } 
+          ...filaActual,
+          rndProxLlegada: undefined,
+          tiempoEntreLlegadas: undefined,
+          proxLlegada: undefined,
+          tipoTrabajo: undefined,
+          rndTipoTrabajo: undefined,
+          rndVariacion: undefined,
+          variacionTiempoTrabajo: undefined,
+          tiempoTrabajo: undefined,
+          trabajos,
+          tecnico1: tecnico.id === 1 ? tecnico : tecnico1,
+          tecnico2: tecnico.id === 2 ? tecnico : tecnico2,
+          colaLlegada,
+        };
+        break;
+
+      case "Cierre local":
+        cerrado = true;
+        filaActual = {
+          ...filaActual,
+          rndProxLlegada: undefined,
+          tiempoEntreLlegadas: undefined,
+          proxLlegada: undefined,
+          tipoTrabajo: undefined,
+          rndTipoTrabajo: undefined,
+          rndVariacion: undefined,
+          variacionTiempoTrabajo: undefined,
+          tiempoTrabajo: undefined,
+        };
         break;
       default:
-        console.log("manejame gato", eventoActual.tipo);
+        console.log("Evento no manejado", eventoActual.tipo);
         break;
     }
 
     await Row.insertMany([filaActual]);
     filaAnterior = filaActual;
+    tiempoTotal = filaActual.reloj;
   }
-  res.status(200).send(true);
+
+  res.status(200).send({ 
+    tiempoPermanenciaTotal, cantidadEquipos: trabajosIndex,
+    contadorNoAtendidos, tiempoTotal, tiempoSinOcupacion1, tiemposSinOcupacion2,
+    n
+  });
 };
