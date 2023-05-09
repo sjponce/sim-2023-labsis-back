@@ -160,6 +160,7 @@ exports.generate = async function (req, res) {
       n,
       reloj: eventoActual.reloj,
       evento: eventoActual.tipo,
+      trabajoActual: eventoActual.trabajo?.id,
     };
 
     const tecnico1 = filaAnterior.tecnico1;
@@ -296,6 +297,7 @@ exports.generate = async function (req, res) {
             100;
           filaActual = {
             ...filaActual,
+            trabajoActual: trabajo.id,
             porcentajeEquiposDerivados,
             tipoTrabajo,
             rndTipoTrabajo,
@@ -464,7 +466,6 @@ exports.generate = async function (req, res) {
           ...filaActual,
           rndProxLlegada: undefined,
           tiempoEntreLlegadas: undefined,
-          proxLlegada: undefined,
           tipoTrabajo: undefined,
           rndTipoTrabajo: undefined,
           rndVariacion: undefined,

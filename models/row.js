@@ -3,6 +3,7 @@ exports = module.exports = function(app, mongoose) {
 	var rowSchema = new mongoose.Schema({
 		n: {type: Number},
 		reloj: 		{ type: Number },
+		trabajoActual: 		{ type: Number },
 		evento: 		{ type: String },
 		rndProxLlegada: { type: Number },
 		tiempoEntreLlegadas: { type: Number },
