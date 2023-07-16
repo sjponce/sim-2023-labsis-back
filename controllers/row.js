@@ -26,7 +26,9 @@ exports.generate = async function (req, res) {
     empleadaGratuitaInicial,
     empleadaPagaInicial,
     proximaLlegadaInicial,
-
+    duracionAuxiliarGratuita,
+    largoColaAuxiliar,
+    reduccionTiempoAuxiliar,
   } = params;
 
   const calcExponencialNegativa = (a) => {
@@ -53,6 +55,7 @@ exports.generate = async function (req, res) {
 
   let n = 0;
   let personasIndex = 0;
+  const tiempoDemoraVentaAuxiliar = tiempoDemoraVenta * (1 - reduccionTiempoAuxiliar);
   const filaInicial = {
     n: 0,
     reloj: 0,
@@ -65,7 +68,7 @@ exports.generate = async function (req, res) {
     tiempoAtencion: "",
     empleadaPaga: {id: 'EP', ...empleadaPagaInicial}, 
     colaPaga: colaPagaInicial,
-    empleadaGratuita: { id: 'EG', ...empleadaPagaInicial }, 
+    empleadaGratuita: { id: 'EG', ...empleadaGratuitaInicial }, 
     colaGratuita: colaGratuitaInicial,
     personas: {},
     contadorTiempoOciosoPaga: 0,
@@ -136,19 +139,30 @@ exports.generate = async function (req, res) {
           colaGratuita :
           colaPaga;
 
-        const 
         if (empleada.estado !== 'Disponible') {
           // Tecnicos no disponibles
           cola.push({ ...persona });
+          if(empleada.id === 'EG' && cola.length >= largoColaAuxiliar) {
+            empleada.auxiliar = true;
+
+            eventos.push({
+              tipo: "Inicio auxiliar",
+              reloj: empleada.finAtencion,
+              persona,
+              empleada,
+              cola,
+            });
+          }
         } else {
             // Caso Disponible
             empleada.estado = "Ocupada";
             empleada.inicioAtencion = filaActual.reloj;
-            empleada.tiempoAtencion = tiempoDemoraVenta;
-            empleada.finAtencion = tiempoDemoraVenta + filaActual.reloj;
+            empleada.tiempoAtencion = empleada.auxiliar ? tiempoDemoraVentaAuxiliar : tiempoDemoraVenta;
+            empleada.finAtencion = empleada.tiempoAtencion + filaActual.reloj;
+            empleada.persona = persona;
 
             persona.inicioAtencion = filaActual.reloj;
-            persona.finAtencion = filaActual.reloj + tiempoDemoraVenta;
+            persona.finAtencion = empleada.finAtencion;
             persona.estado = "Siendo atendido";
 
             reloj = reloj + tiempoDemoraVenta;
@@ -189,11 +203,12 @@ exports.generate = async function (req, res) {
           let persona = cola.shift();
           empleada.estado = "Ocupada";
           empleada.inicioAtencion = filaActual.reloj;
-          empleada.tiempoAtencion = tiempoDemoraVenta;
-          empleada.finAtencion = tiempoDemoraVenta + filaActual.reloj;
+          empleada.tiempoAtencion = empleada.auxiliar ? tiempoDemoraVentaAuxiliar : tiempoDemoraVenta;
+          empleada.finAtencion = empleada.tiempoAtencion + filaActual.reloj;
+          empleada.persona = persona;
 
           persona.inicioAtencion = filaActual.reloj;
-          persona.finAtencion = filaActual.reloj + tiempoDemoraVenta;
+          persona.finAtencion = empleada.finAtencion;
           persona.estado = "Siendo atendido";
           
           personas[`T${trabajo.id}`] = {
@@ -230,6 +245,19 @@ exports.generate = async function (req, res) {
         };
         break;
 
+      case 'Inicio auxiliar':
+        eventos.push({
+          tipo: "Fin auxiliar",
+          reloj: filaActual.reloj + duracionAuxiliarGratuita,
+        });
+      break;
+
+      case 'Fin auxiliar':
+        filaActual.empleadaGratuita.auxiliar = false;
+        filaActual = {
+          ...filaActual,
+        }
+      break;
       default:
         console.log("Evento no manejado", eventoActual.tipo);
         break;
