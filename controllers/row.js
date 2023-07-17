@@ -11,7 +11,9 @@ exports.findAll = async function (req, res) {
 
 //GET - Return all rows in the DB
 exports.generate = async function (req, res) {
+  console.log('delete');
   await Row.deleteMany({});
+  console.log('deletent');
   const params = req.query;
   Object.keys(params).forEach((k) =>
     !isNaN(params[k]) ? (params[k] = Number(params[k])) : k
@@ -23,8 +25,8 @@ exports.generate = async function (req, res) {
     tiempoFinSimulacion,
     colaPagaInicial,
     colaGratuitaInicial,
-    empleadaGratuitaInicial,
-    empleadaPagaInicial,
+    finTrabajoEmpleadaGratuitaInicial,
+    finTrabajoEmpleadaPagaInicial,
     proximaLlegadaInicial,
     duracionAuxiliarGratuita,
     largoColaAuxiliar,
@@ -55,6 +57,75 @@ exports.generate = async function (req, res) {
 
   let n = 0;
   let personasIndex = 0;
+  let empleadaPagaInicial = { id: 'EP', estado: 'Disponible' };
+  let empleadaGratuitaInicial = { id: 'EG', estado: 'Disponible' };
+  let colaGratuita = [];
+  let colaPaga = [];
+  let personasPorLlegada = 3;
+
+  if (finTrabajoEmpleadaGratuitaInicial) {
+    let personaAtendidaInicial = {
+      id: personasIndex++,
+      tipoCola: 'Gratuita',
+      llegada: filaActual.reloj,
+      estado: "Siendo Atendida",
+      finAtencion: finTrabajoEmpleadaGratuitaInicial,
+    };
+    
+    personas.push(personaAtendidaInicial)
+    empleadaGratuitaInicial = { 
+      ...empleadaGratuitaInicial,
+      estado: 'Ocupada',
+      finTrabajo: finTrabajoEmpleadaGratuitaInicial,
+      persona: personaAtendidaInicial,
+    }
+  }
+
+  if (finTrabajoEmpleadaPagaInicial) {
+    let personaAtendidaInicial = {
+      id: personasIndex++,
+      tipoCola: 'Paga',
+      llegada: filaActual.reloj,
+      estado: "Siendo Atendida",
+      finAtencion: finTrabajoEmpleadaPagaInicial,
+    };
+    
+    personas.push(personaAtendidaInicial)
+    empleadaGratuitaInicial = { 
+      ...empleadaGratuitaInicial,
+      estado: 'Ocupada',
+      finTrabajo: finTrabajoEmpleadaPagaInicial,
+      persona: personaAtendidaInicial,
+    }
+  }
+
+  if (colaPagaInicial) {
+    for (let i = 0; i <= colaPagaInicial; i++) {
+      const personaInicial = {
+        id: personasIndex++,
+        tipoCola: 'Paga',
+        llegada: filaActual.reloj,
+        estado: "Esperando",
+      };
+      personas.push(personaInicial)
+      colaPaga.push(personaInicial)
+    }
+  }
+
+  if (colaGratuitaInicial) {
+    for (let i = 0; i <= colaGratuitaInicial; i++) {
+      persona = {
+        ...persona,
+        id: personasIndex++,
+        tipoCola: 'Gratuita',
+        llegada: filaActual.reloj,
+        estado: "Esperando",
+      };
+      personas.push(personaInicial);
+      colaGratuita.push(personaInicial);
+    }
+  }
+
   const tiempoDemoraVentaAuxiliar = tiempoDemoraVenta * (1 - reduccionTiempoAuxiliar);
   const filaInicial = {
     n: 0,
@@ -66,10 +137,10 @@ exports.generate = async function (req, res) {
     rndTipoCola: "",
     tipoCola: "",
     tiempoAtencion: "",
-    empleadaPaga: {id: 'EP', ...empleadaPagaInicial}, 
-    colaPaga: colaPagaInicial,
-    empleadaGratuita: { id: 'EG', ...empleadaGratuitaInicial }, 
-    colaGratuita: colaGratuitaInicial,
+    empleadaPaga: empleadaPagaInicial, 
+    colaPaga,
+    empleadaGratuita: empleadaGratuitaInicial, 
+    colaGratuita,
     personas: {},
     contadorTiempoOciosoPaga: 0,
   };
@@ -96,6 +167,12 @@ exports.generate = async function (req, res) {
       n,
       reloj: eventoActual.reloj,
       evento: eventoActual.tipo,
+      rndTipoCola1: undefined,
+      tipoCola1: undefined,
+      rndTipoCola2: undefined,
+      tipoCola2: undefined,
+      rndTipoCola3: undefined,
+      tipoCola3: undefined,
     };
 
     const empleadaGratuita = filaAnterior.empleadaGratuita;
@@ -103,6 +180,12 @@ exports.generate = async function (req, res) {
     const colaGratuita = filaAnterior.colaLlegada;
     const colaPaga = filaAnterior.colaLlegada;
     const personas = filaAnterior.personas;
+    
+    if (empleadaPaga.estado === 'Disponible') {
+      empleadaPaga.tiempoOcioso = empleadaPaga.tiempoOcioso + (filaActual.reloj - empleadaPaga.lastUpdate)
+    }
+    empleadaPaga.lastUpdate = filaActual.reloj;
+
     let persona = {
       estado: 'Esperando',
     }
@@ -117,43 +200,46 @@ exports.generate = async function (req, res) {
           rndProxLlegada,
           tiempoEntreLlegadas,
           proxLlegada,
-        }; {
-
-        const [
-          tipoCola,
-          rndTipoCola
-        ] = calcTipoCola();
-        persona = {
-          ...persona,
-          id: personasIndex++,
-          tipoCola,
-          llegada: filaActual.reloj,
-          estado: "Esperando",
         };
-        let reloj = filaActual.reloj;
-        let empleada = tipoCola === 'Gratuita' ?
-          empleadaGratuita :
-          empleadaPaga;
-        
-        let cola = tipoCola === 'Gratuita' ?
-          colaGratuita :
-          colaPaga;
+        let tiposCola = [];
+        for (let i = 0; i <= personasPorLlegada; i++) {
+          const [
+            tipoCola,
+            rndTipoCola
+          ] = calcTipoCola();
 
-        if (empleada.estado !== 'Disponible') {
-          // Tecnicos no disponibles
-          cola.push({ ...persona });
-          if(empleada.id === 'EG' && cola.length >= largoColaAuxiliar) {
-            empleada.auxiliar = true;
+          tiposCola.push([tipoCola,rndTipoCola])
+          persona = {
+            ...persona,
+            id: personasIndex++,
+            tipoCola,
+            llegada: filaActual.reloj,
+            estado: "Esperando",
+          };
+          let reloj = filaActual.reloj;
+          let empleada = tipoCola === 'Gratuita' ?
+            empleadaGratuita :
+            empleadaPaga;
 
-            eventos.push({
-              tipo: "Inicio auxiliar",
-              reloj: empleada.finAtencion,
-              persona,
-              empleada,
-              cola,
-            });
-          }
-        } else {
+          let cola = tipoCola === 'Gratuita' ?
+            colaGratuita :
+            colaPaga;
+
+          if (empleada.estado !== 'Disponible') {
+            // Tecnicos no disponibles
+            cola.push({ ...persona });
+            if(empleada.id === 'EG' && cola.length >= largoColaAuxiliar) {
+              empleada.auxiliar = true;
+
+              eventos.push({
+                tipo: "Inicio auxiliar",
+                reloj: empleada.finAtencion,
+                persona,
+                empleada,
+                cola,
+              });
+            }
+          } else {
             // Caso Disponible
             empleada.estado = "Ocupada";
             empleada.inicioAtencion = filaActual.reloj;
@@ -179,7 +265,6 @@ exports.generate = async function (req, res) {
             ...personas[`T${persona.id}`],
             ...persona,
           };
-
           filaActual = {
             ...filaActual,
             personaActual: trabajo.id,
@@ -193,6 +278,15 @@ exports.generate = async function (req, res) {
             personas,
           };
         }
+        filaActual = {
+          ...filaActual,
+          rndTipoCola1: tiposCola[0][0],
+          tipoCola1: tiposCola[0][1],
+          rndTipoCola2: tiposCola[1][0],
+          tipoCola2: tiposCola[1][1],
+          rndTipoCola3: tiposCola[2][0],
+          tipoCola3: tiposCola[2][1],
+        };
         break;
 
       case "Fin trabajo":
@@ -237,11 +331,17 @@ exports.generate = async function (req, res) {
           tipoCola: undefined,
           rndTipoCola: undefined,
           tiempoAtencion: undefined,
+          rndTipoCola1: undefined,
+          tipoCola1: undefined,
+          rndTipoCola2: undefined,
+          tipoCola2: undefined,
+          rndTipoCola3: undefined,
+          tipoCola3: undefined,
           personas,
           empleadaPaga: empleada.id === 'EP' ? empleada : empleadaPaga,
           empleadaGratuita: empleada.id === 'EG' ? empleada : empleadaGratuita,
           colaPaga,
-          colaGratuita
+          colaGratuita,
         };
         break;
 
@@ -256,16 +356,18 @@ exports.generate = async function (req, res) {
         filaActual.empleadaGratuita.auxiliar = false;
         filaActual = {
           ...filaActual,
+          rndTipoCola1: undefined,
+          tipoCola1: undefined,
+          rndTipoCola2: undefined,
+          tipoCola2: undefined,
+          rndTipoCola3: undefined,
+          tipoCola3: undefined,
         }
       break;
       default:
         console.log("Evento no manejado", eventoActual.tipo);
         break;
     }
-
-    filaActual = {
-      ...filaActual,
-    };
 
     await Row.insertMany([filaActual]);
     filaAnterior = filaActual;
