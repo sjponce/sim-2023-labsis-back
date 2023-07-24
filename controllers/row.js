@@ -25,8 +25,8 @@ exports.generate = async function (req, res) {
     tiempoFinSimulacion,
     colaPagaInicial,
     colaGratuitaInicial,
-    finTrabajoEmpleadaGratuitaInicial,
-    finTrabajoEmpleadaPagaInicial,
+    finAtencionEmpleadaGratuitaInicial,
+    finAtencionEmpleadaPagaInicial,
     proximaLlegadaInicial,
     duracionAuxiliarGratuita,
     largoColaAuxiliar,
@@ -35,7 +35,7 @@ exports.generate = async function (req, res) {
 
   const calcExponencialNegativa = (a) => {
     const rnd = Math.random();
-    const value = (-1 / a) * Math.log(1 - rnd);
+    const value = ((-1 / (a / 60)) * Math.log(1 - rnd));
     return [rnd, value];
   };
 
@@ -57,71 +57,103 @@ exports.generate = async function (req, res) {
 
   let n = 0;
   let personasIndex = 0;
-  let empleadaPagaInicial = { id: 'EP', estado: 'Disponible' };
-  let empleadaGratuitaInicial = { id: 'EG', estado: 'Disponible' };
+  let empleadaPagaInicial = { id: 'EP', estado: 'Disponible', tiempoOcioso: 0, lastUpdate: 0 };
+  let empleadaGratuitaInicial = { id: 'EG', estado: 'Disponible', tiempoOcioso: 0, lastUpdate: 0 };
+  let personas = {};
   let colaGratuita = [];
   let colaPaga = [];
-  let personasPorLlegada = 3;
 
-  if (finTrabajoEmpleadaGratuitaInicial) {
+  const eventos = [
+    { tipo: "Llegada", reloj: proximaLlegadaInicial },
+  ];
+
+  if (finAtencionEmpleadaGratuitaInicial) {
     let personaAtendidaInicial = {
       id: personasIndex++,
       tipoCola: 'Gratuita',
-      llegada: filaActual.reloj,
+      llegada: 0,
       estado: "Siendo Atendida",
-      finAtencion: finTrabajoEmpleadaGratuitaInicial,
+      finAtencion: finAtencionEmpleadaGratuitaInicial,
     };
-    
-    personas.push(personaAtendidaInicial)
+    personas[`T${personaAtendidaInicial.id}`] = {
+      ...personas[`T${personaAtendidaInicial.id}`],
+      ...personaAtendidaInicial,
+    };
     empleadaGratuitaInicial = { 
       ...empleadaGratuitaInicial,
       estado: 'Ocupada',
-      finTrabajo: finTrabajoEmpleadaGratuitaInicial,
+      inicioAtencion: 0,
+      tiempoAtencion: 0,
+      finAtencion: finAtencionEmpleadaGratuitaInicial,
       persona: personaAtendidaInicial,
     }
+    eventos.push({
+      tipo: "Fin atencion",
+      reloj: finAtencionEmpleadaGratuitaInicial,
+      persona: personaAtendidaInicial,
+      empleada: empleadaGratuitaInicial,
+      cola: colaGratuita
+    });
   }
 
-  if (finTrabajoEmpleadaPagaInicial) {
+  if (finAtencionEmpleadaPagaInicial) {
     let personaAtendidaInicial = {
       id: personasIndex++,
       tipoCola: 'Paga',
-      llegada: filaActual.reloj,
+      llegada: 0,
       estado: "Siendo Atendida",
-      finAtencion: finTrabajoEmpleadaPagaInicial,
+      finAtencion: finAtencionEmpleadaPagaInicial,
     };
     
-    personas.push(personaAtendidaInicial)
-    empleadaGratuitaInicial = { 
-      ...empleadaGratuitaInicial,
+    personas[`T${personaAtendidaInicial.id}`] = {
+      ...personas[`T${personaAtendidaInicial.id}`],
+      ...personaAtendidaInicial,
+    };
+    empleadaPagaInicial = { 
+      ...empleadaPagaaInicial,
       estado: 'Ocupada',
-      finTrabajo: finTrabajoEmpleadaPagaInicial,
+      inicioAtencion: 0,
+      tiempoAtencion: 0,
+      finAtencion: finAtencionEmpleadaPagaInicial,
       persona: personaAtendidaInicial,
     }
+    eventos.push({
+      tipo: "Fin atencion",
+      reloj: finAtencionEmpleadaPagaInicial,
+      persona: personaAtendidaInicial,
+      empleada: empleadaPagaInicial,
+      cola: colaPaga
+    });
   }
 
   if (colaPagaInicial) {
-    for (let i = 0; i <= colaPagaInicial; i++) {
+    for (let i = 0; i < colaPagaInicial; i++) {
       const personaInicial = {
         id: personasIndex++,
         tipoCola: 'Paga',
-        llegada: filaActual.reloj,
+        llegada: 0,
         estado: "Esperando",
       };
-      personas.push(personaInicial)
+      personas[`T${personaInicial.id}`] = {
+        ...personas[`T${personaInicial.id}`],
+        ...personaInicial,
+      };
       colaPaga.push(personaInicial)
     }
   }
 
   if (colaGratuitaInicial) {
-    for (let i = 0; i <= colaGratuitaInicial; i++) {
-      persona = {
-        ...persona,
+    for (let i = 0; i < colaGratuitaInicial; i++) {
+      const personaInicial = {
         id: personasIndex++,
         tipoCola: 'Gratuita',
-        llegada: filaActual.reloj,
+        llegada: 0,
         estado: "Esperando",
       };
-      personas.push(personaInicial);
+      personas[`T${personaInicial.id}`] = {
+        ...personas[`T${personaInicial.id}`],
+        ...personaInicial,
+      };
       colaGratuita.push(personaInicial);
     }
   }
@@ -131,9 +163,9 @@ exports.generate = async function (req, res) {
     n: 0,
     reloj: 0,
     evento: "Init",
-    rndProxLlegada,
-    tiempoEntreLlegadas: proxLlegada,
-    proxLlegada,
+    rndProxLlegada: undefined,
+    tiempoEntreLlegadas: proximaLlegadaInicial,
+    proxLlegada: proximaLlegadaInicial,
     rndTipoCola: "",
     tipoCola: "",
     tiempoAtencion: "",
@@ -141,26 +173,20 @@ exports.generate = async function (req, res) {
     colaPaga,
     empleadaGratuita: empleadaGratuitaInicial, 
     colaGratuita,
-    personas: {},
+    personas,
     contadorTiempoOciosoPaga: 0,
   };
 
   let filaActual = filaInicial;
   await Row.insertMany([filaActual]);
 
-  const eventos = [
-    { tipo: "Llegada", reloj: proximaLlegadaInicial },
-  ];
-
   let filaAnterior = filaInicial;
-  while (
-    cerrado === false ||
-    (eventos.filter((e) => e.reloj <= tiempoFinSimulacion))
-  ) {
+  while (eventos.find(e => e.reloj <= tiempoFinSimulacion)) {
     n++;
     // Obtenemos el proximo evento.
     eventos.sort((a, b) => a.reloj - b.reloj);
     eventoActual = eventos.shift();
+    console.log((n, eventoActual.reloj));
 
     filaActual = {
       ...filaAnterior,
@@ -177,9 +203,9 @@ exports.generate = async function (req, res) {
 
     const empleadaGratuita = filaAnterior.empleadaGratuita;
     const empleadaPaga = filaAnterior.empleadaPaga;
-    const colaGratuita = filaAnterior.colaLlegada;
-    const colaPaga = filaAnterior.colaLlegada;
-    const personas = filaAnterior.personas;
+    colaGratuita = filaAnterior.colaGratuita;
+    colaPaga = filaAnterior.colaPaga;
+    personas = filaAnterior.personas;
     
     if (empleadaPaga.estado === 'Disponible') {
       empleadaPaga.tiempoOcioso = empleadaPaga.tiempoOcioso + (filaActual.reloj - empleadaPaga.lastUpdate)
@@ -195,20 +221,22 @@ exports.generate = async function (req, res) {
         let [rndProxLlegada, tiempoEntreLlegadas] = calcExponencialNegativa(minutosPorLlegada);
         const proxLlegada = tiempoEntreLlegadas + filaActual.reloj;
 
+        eventos.push({
+          tipo: "Llegada",
+          reloj: tiempoEntreLlegadas + filaActual.reloj,
+        });
+
         filaActual = {
           ...filaActual,
           rndProxLlegada,
           tiempoEntreLlegadas,
           proxLlegada,
         };
-        let tiposCola = [];
-        for (let i = 0; i <= personasPorLlegada; i++) {
           const [
             tipoCola,
             rndTipoCola
           ] = calcTipoCola();
 
-          tiposCola.push([tipoCola,rndTipoCola])
           persona = {
             ...persona,
             id: personasIndex++,
@@ -228,12 +256,12 @@ exports.generate = async function (req, res) {
           if (empleada.estado !== 'Disponible') {
             // Tecnicos no disponibles
             cola.push({ ...persona });
-            if(empleada.id === 'EG' && cola.length >= largoColaAuxiliar) {
+            if(empleada.id === 'EG' && cola.length >= largoColaAuxiliar && !eventos.find(e => e.tipo === 'Inicio auxiliar') && !empleada.auxiliar) {
               empleada.auxiliar = true;
 
               eventos.push({
                 tipo: "Inicio auxiliar",
-                reloj: empleada.finAtencion,
+                reloj: empleada.finAtencion + filaActual.reloj,
                 persona,
                 empleada,
                 cola,
@@ -253,7 +281,7 @@ exports.generate = async function (req, res) {
 
             reloj = reloj + tiempoDemoraVenta;
             eventos.push({
-              tipo: "Fin Atencion",
+              tipo: "Fin atencion",
               reloj,
               persona,
               empleada,
@@ -267,7 +295,7 @@ exports.generate = async function (req, res) {
           };
           filaActual = {
             ...filaActual,
-            personaActual: trabajo.id,
+            personaActual: persona.id,
             tipoCola,
             rndTipoCola,
             tiempoDemoraVenta,
@@ -277,45 +305,37 @@ exports.generate = async function (req, res) {
             empleadaPaga,
             personas,
           };
-        }
-        filaActual = {
-          ...filaActual,
-          rndTipoCola1: tiposCola[0][0],
-          tipoCola1: tiposCola[0][1],
-          rndTipoCola2: tiposCola[1][0],
-          tipoCola2: tiposCola[1][1],
-          rndTipoCola3: tiposCola[2][0],
-          tipoCola3: tiposCola[2][1],
-        };
         break;
 
-      case "Fin trabajo":
-        let empleada = eventoActual.empleada;
-        let cola = eventoActual.cola;
+      case "Fin atencion":
+        let empleadaActual = eventoActual.empleada.id === 'EG' ? filaActual.empleadaGratuita : filaActual.empleadaPaga;
+        let colaActual = eventoActual.cola ;
 
-        if (cola.length) {
-          let persona = cola.shift();
-          empleada.estado = "Ocupada";
-          empleada.inicioAtencion = filaActual.reloj;
-          empleada.tiempoAtencion = empleada.auxiliar ? tiempoDemoraVentaAuxiliar : tiempoDemoraVenta;
-          empleada.finAtencion = empleada.tiempoAtencion + filaActual.reloj;
-          empleada.persona = persona;
+        if (colaActual.length) {
+          let persona = colaActual.shift();
+          empleadaActual.estado = "Ocupada";
+          empleadaActual.inicioAtencion = filaActual.reloj;
+          empleadaActual.tiempoAtencion = empleadaActual.auxiliar ? tiempoDemoraVentaAuxiliar : tiempoDemoraVenta;
+          empleadaActual.finAtencion = empleadaActual.tiempoAtencion + filaActual.reloj;
+          empleadaActual.persona = persona;
 
           persona.inicioAtencion = filaActual.reloj;
-          persona.finAtencion = empleada.finAtencion;
+          persona.finAtencion = empleadaActual.finAtencion;
           persona.estado = "Siendo atendido";
           
-          personas[`T${trabajo.id}`] = {
+          personas[`T${persona.id}`] = {
             ...persona,
           };
           eventos.push({
-            tipo: "Fin trabajo",
-            reloj: empleada.finAtencion,
-            trabajo,
-            tecnico,
+            tipo: "Fin atencion",
+            reloj: empleadaActual.finAtencion,
+            persona,
+            empleada: empleadaActual,
+            cola: colaActual
           });
         } else {
-          empleada = {
+          empleadaActual = {
+            ...empleadaActual,
             id: eventoActual.empleada.id,
             estado: "Disponible",
             inicioAtencion: undefined,
@@ -324,6 +344,7 @@ exports.generate = async function (req, res) {
           };
         }
 
+        delete personas[`T${eventoActual.persona.id}`];
         filaActual = {
           ...filaActual,
           rndProxLlegada: undefined,
@@ -338,8 +359,8 @@ exports.generate = async function (req, res) {
           rndTipoCola3: undefined,
           tipoCola3: undefined,
           personas,
-          empleadaPaga: empleada.id === 'EP' ? empleada : empleadaPaga,
-          empleadaGratuita: empleada.id === 'EG' ? empleada : empleadaGratuita,
+          empleadaPaga: empleadaActual.id === 'EP' ? empleadaActual : empleadaPaga,
+          empleadaGratuita: empleadaActual.id === 'EG' ? empleadaActual : empleadaGratuita,
           colaPaga,
           colaGratuita,
         };

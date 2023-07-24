@@ -5,7 +5,7 @@ var express         = require("express"),
     mongoose        = require('mongoose'),
     cors            = require('cors');
 // Connection to DB
-mongoose.connect('mongodb://localhost:27017/rows');
+mongoose.connect('mongodb://127.0.0.1:27017/rows');
 
 // Middlewares
 app.use(bodyParser.urlencoded({ extended: false }));
