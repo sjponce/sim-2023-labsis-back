@@ -197,7 +197,7 @@ exports.generate = async function (req, res) {
 
       eventos.push({
         tipo: "Inicio auxiliar",
-        reloj: empleadaGratuita.finAtencion + 0.00001,
+        reloj: filaActual.reloj + 0.00001,
         empleada: empleadaGratuita,
         cola: colaGratuita,
       });
