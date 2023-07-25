@@ -11,9 +11,7 @@ exports.findAll = async function (req, res) {
 
 //GET - Return all rows in the DB
 exports.generate = async function (req, res) {
-  console.log('delete');
   await Row.deleteMany({});
-  console.log('deletent');
   const params = req.query;
   Object.keys(params).forEach((k) =>
     !isNaN(params[k]) ? (params[k] = Number(params[k])) : k
